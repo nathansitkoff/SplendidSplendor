@@ -19,6 +19,8 @@ public partial class GameBoard : Control
     private Button _cancelButton = null!;
     private Label _actionLabel = null!;
     private DiscardPanel _discardPanel = null!;
+    private PanelContainer _victoryPanel = null!;
+    private Label _victoryLabel = null!;
 
     public override void _Ready()
     {
@@ -156,6 +158,33 @@ public partial class GameBoard : Control
             BorderColor = Colors.Yellow
         });
         AddChild(_discardPanel);
+
+        // Victory overlay — hidden by default
+        _victoryPanel = new PanelContainer();
+        _victoryPanel.Visible = false;
+        _victoryPanel.AnchorLeft = 0.2f;
+        _victoryPanel.AnchorRight = 0.6f;
+        _victoryPanel.AnchorTop = 0.25f;
+        _victoryPanel.AnchorBottom = 0.75f;
+        _victoryPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(0.05f, 0.05f, 0.1f, 0.95f),
+            BorderWidthLeft = 3, BorderWidthRight = 3,
+            BorderWidthTop = 3, BorderWidthBottom = 3,
+            BorderColor = new Color(0.9f, 0.75f, 0.1f)
+        });
+        var victoryMargin = new MarginContainer();
+        victoryMargin.AddThemeConstantOverride("margin_left", 20);
+        victoryMargin.AddThemeConstantOverride("margin_right", 20);
+        victoryMargin.AddThemeConstantOverride("margin_top", 20);
+        victoryMargin.AddThemeConstantOverride("margin_bottom", 20);
+        _victoryLabel = new Label();
+        _victoryLabel.AddThemeColorOverride("font_color", Colors.White);
+        _victoryLabel.AddThemeFontSizeOverride("font_size", 20);
+        _victoryLabel.AutowrapMode = TextServer.AutowrapMode.Word;
+        victoryMargin.AddChild(_victoryLabel);
+        _victoryPanel.AddChild(victoryMargin);
+        AddChild(_victoryPanel);
     }
 
     private GameAction? BuildCurrentAction()
@@ -264,8 +293,23 @@ public partial class GameBoard : Control
 
     private void RefreshDisplay()
     {
+        // Victory check
+        if (_state.GameOver)
+        {
+            int winner = GameEngine.GetWinner(_state);
+            var scores = string.Join("\n", _state.Players.Select((p, i) =>
+                $"Player {i + 1}: {p.Score} points ({p.OwnedCards.Count} cards)"));
+            _victoryLabel.Text = $"GAME OVER\n\nPlayer {winner + 1} wins!\n\n{scores}";
+            _victoryPanel.Visible = true;
+            _discardPanel.Visible = false;
+        }
+        else
+        {
+            _victoryPanel.Visible = false;
+        }
+
         // Discard panel
-        if (_state.NeedsDiscard)
+        if (_state.NeedsDiscard && !_state.GameOver)
         {
             _discardPanel.Setup(_state.CurrentPlayer);
             _discardPanel.Visible = true;
@@ -276,7 +320,9 @@ public partial class GameBoard : Control
         }
 
         // Update title
-        var turnText = _state.NeedsDiscard
+        var turnText = _state.GameOver
+            ? "Game Over!"
+            : _state.NeedsDiscard
             ? $"Player {_state.CurrentPlayerIndex + 1} — Discard gems!"
             : $"Player {_state.CurrentPlayerIndex + 1}'s Turn";
         _titleLabel.Text = $"Splendid Splendor — {turnText}";

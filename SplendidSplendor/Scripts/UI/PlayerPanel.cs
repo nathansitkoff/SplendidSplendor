@@ -33,10 +33,16 @@ public partial class PlayerPanel : PanelContainer
 
         // Player name and score
         var nameColor = _isCurrentPlayer ? Colors.Yellow : Colors.White;
-        DrawString(ThemeDB.FallbackFont, new Vector2(14, 28),
+        DrawString(ThemeDB.FallbackFont, new Vector2(14, 32),
             $"Player {_playerIndex + 1}", HorizontalAlignment.Left, -1, 22, nameColor);
-        DrawString(ThemeDB.FallbackFont, new Vector2(Size.X - 14, 28),
-            $"Score: {_player.Score}", HorizontalAlignment.Right, (int)Size.X - 28, 18, Colors.White);
+
+        // Large score in top right (left-aligned at computed position)
+        var scoreColor = _player.Score >= 15 ? new Color(0.9f, 0.75f, 0.1f) : Colors.White;
+        var scoreText = $"{_player.Score} VP";
+        var font = ThemeDB.FallbackFont;
+        var scoreWidth = font.GetStringSize(scoreText, HorizontalAlignment.Left, -1, 28).X;
+        DrawString(font, new Vector2(Size.X - scoreWidth - 14, 36),
+            scoreText, HorizontalAlignment.Left, -1, 28, scoreColor);
 
         // Current player indicator
         if (_isCurrentPlayer)

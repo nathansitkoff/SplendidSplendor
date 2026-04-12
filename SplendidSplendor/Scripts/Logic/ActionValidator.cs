@@ -6,6 +6,9 @@ public static class ActionValidator
 {
     public static bool IsValid(GameState state, GameAction action)
     {
+        if (state.GameOver)
+            return false;
+
         // During discard state, only discard is valid
         if (state.NeedsDiscard)
         {

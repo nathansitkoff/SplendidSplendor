@@ -232,9 +232,85 @@ public static class GameEngine
         }
     }
 
+    private static void CheckNobleVisit(GameState state)
+    {
+        var player = state.CurrentPlayer;
+        var bonuses = player.Bonuses;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+
+        for (int i = 0; i < state.Nobles.Count; i++)
+        {
+            var noble = state.Nobles[i];
+            bool qualifies = true;
+            foreach (var type in gemTypes)
+            {
+                if (bonuses[type] < noble.Requirements[type])
+                {
+                    qualifies = false;
+                    break;
+                }
+            }
+            if (qualifies)
+            {
+                player.Nobles.Add(noble);
+                state.Nobles.RemoveAt(i);
+                return; // Only 1 noble per turn
+            }
+        }
+    }
+
+    private static void CheckGameEnd(GameState state)
+    {
+        if (state.CurrentPlayer.Score >= 15)
+        {
+            state.GameEndTriggered = true;
+            // Remember who triggered — the round ends when it would be
+            // this player's turn again (all others get one more turn)
+            state.FinalRound = state.CurrentPlayerIndex;
+        }
+    }
+
     private static void AdvanceTurn(GameState state)
     {
-        state.CurrentPlayerIndex = (state.CurrentPlayerIndex + 1) % state.Players.Count;
+        // Check noble visit before advancing
+        CheckNobleVisit(state);
+
+        // Check if this player triggered game end
+        if (!state.GameEndTriggered)
+            CheckGameEnd(state);
+
+        // Advance to next player
+        int nextPlayer = (state.CurrentPlayerIndex + 1) % state.Players.Count;
+        state.CurrentPlayerIndex = nextPlayer;
+
+        // Game is over when we wrap back to the player who started the
+        // final round (player 0 in a normal game, or whoever's turn it
+        // was when 15 was first reached). Everyone after the trigger
+        // player gets exactly one more turn.
+        if (state.GameEndTriggered && nextPlayer == 0)
+        {
+            state.GameOver = true;
+        }
+    }
+
+    public static int GetWinner(GameState state)
+    {
+        int bestPlayer = 0;
+        int bestScore = state.Players[0].Score;
+        int fewestCards = state.Players[0].OwnedCards.Count;
+
+        for (int i = 1; i < state.Players.Count; i++)
+        {
+            int score = state.Players[i].Score;
+            int cards = state.Players[i].OwnedCards.Count;
+            if (score > bestScore || (score == bestScore && cards < fewestCards))
+            {
+                bestPlayer = i;
+                bestScore = score;
+                fewestCards = cards;
+            }
+        }
+        return bestPlayer;
     }
 
     private static void Shuffle<T>(List<T> list)

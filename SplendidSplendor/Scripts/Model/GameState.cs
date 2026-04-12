@@ -10,6 +10,7 @@ public class GameState
     public List<Noble> Nobles { get; set; } = new();
     public bool NeedsDiscard { get; set; }
     public bool GameEndTriggered { get; set; }
+    public bool GameOver { get; set; }
     public int FinalRound { get; set; }
 
     public PlayerState CurrentPlayer => Players[CurrentPlayerIndex];
