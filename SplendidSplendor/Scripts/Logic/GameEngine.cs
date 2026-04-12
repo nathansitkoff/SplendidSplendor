@@ -72,6 +72,9 @@ public static class GameEngine
             case GameAction.TakeTwoGemsAction a:
                 ApplyTakeTwoGems(state, a);
                 break;
+            case GameAction.PurchaseCardAction a:
+                ApplyPurchaseCard(state, a);
+                break;
         }
 
         AdvanceTurn(state);
@@ -92,6 +95,44 @@ public static class GameEngine
         var player = state.CurrentPlayer;
         state.Bank[action.Color] -= 2;
         player.Gems[action.Color] += 2;
+    }
+
+    private static void ApplyPurchaseCard(GameState state, GameAction.PurchaseCardAction action)
+    {
+        var player = state.CurrentPlayer;
+        var card = state.TierMarket[action.Tier][action.MarketIndex];
+        var bonuses = player.Bonuses;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+
+        // Pay for the card
+        int goldSpent = 0;
+        foreach (var type in gemTypes)
+        {
+            int cost = card.Cost[type];
+            int discount = bonuses[type];
+            int effectiveCost = Math.Max(0, cost - discount);
+            int gemsToSpend = Math.Min(effectiveCost, player.Gems[type]);
+            int remainder = effectiveCost - gemsToSpend;
+
+            player.Gems[type] -= gemsToSpend;
+            state.Bank[type] += gemsToSpend;
+            goldSpent += remainder;
+        }
+
+        player.Gems[GemType.Gold] -= goldSpent;
+        state.Bank[GemType.Gold] += goldSpent;
+
+        // Move card to player's tableau
+        player.OwnedCards.Add(card);
+
+        // Remove from market and refill
+        state.TierMarket[action.Tier].RemoveAt(action.MarketIndex);
+        if (state.TierDecks[action.Tier].Count > 0)
+        {
+            var replacement = state.TierDecks[action.Tier][0];
+            state.TierDecks[action.Tier].RemoveAt(0);
+            state.TierMarket[action.Tier].Add(replacement);
+        }
     }
 
     private static void AdvanceTurn(GameState state)

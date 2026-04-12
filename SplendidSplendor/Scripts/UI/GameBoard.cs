@@ -192,6 +192,15 @@ public partial class GameBoard : Control
         RefreshDisplay();
     }
 
+    private void OnCardClicked(int tier, int marketIndex)
+    {
+        var action = GameAction.PurchaseCard(tier, marketIndex);
+        if (!ActionValidator.IsValid(_state, action)) return;
+
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+    }
+
     private void OnCancelPressed()
     {
         _gemBank.ClearSelection();
@@ -243,7 +252,9 @@ public partial class GameBoard : Control
                 cardDisplay.CustomMinimumSize = new Vector2(120, 180);
                 row.AddChild(cardDisplay);
                 var card = i < _state.TierMarket[tier].Count ? _state.TierMarket[tier][i] : null;
-                cardDisplay.SetCard(card);
+                bool affordable = card != null && ActionValidator.CanAffordCard(_state.CurrentPlayer, card);
+                cardDisplay.SetCard(card, interactive: true, affordable: affordable, tier: tier, marketIndex: i);
+                cardDisplay.CardClicked += OnCardClicked;
             }
         }
 

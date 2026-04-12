@@ -8,6 +8,9 @@ public abstract class GameAction
     public static TakeTwoGemsAction TakeTwoGems(GemType color)
         => new(color);
 
+    public static PurchaseCardAction PurchaseCard(int tier, int marketIndex)
+        => new(tier, marketIndex);
+
     private GameAction() { }
 
     public class TakeThreeGemsAction : GameAction
@@ -20,5 +23,16 @@ public abstract class GameAction
     {
         public GemType Color { get; }
         public TakeTwoGemsAction(GemType color) => Color = color;
+    }
+
+    public class PurchaseCardAction : GameAction
+    {
+        public int Tier { get; }
+        public int MarketIndex { get; }
+        public PurchaseCardAction(int tier, int marketIndex)
+        {
+            Tier = tier;
+            MarketIndex = marketIndex;
+        }
     }
 }

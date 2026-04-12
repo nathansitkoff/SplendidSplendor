@@ -6,11 +6,36 @@ namespace SplendidSplendor.UI;
 public partial class CardDisplay : PanelContainer
 {
     private Card? _card;
+    private bool _affordable;
+    private bool _interactive;
 
-    public void SetCard(Card? card)
+    [Signal]
+    public delegate void CardClickedEventHandler(int tier, int marketIndex);
+
+    private int _tier;
+    private int _marketIndex;
+
+    public void SetCard(Card? card, bool interactive = false, bool affordable = false, int tier = 0, int marketIndex = 0)
     {
         _card = card;
+        _interactive = interactive && card != null;
+        _affordable = affordable;
+        _tier = tier;
+        _marketIndex = marketIndex;
+        MouseDefaultCursorShape = _interactive && _affordable
+            ? CursorShape.PointingHand
+            : CursorShape.Arrow;
         QueueRedraw();
+    }
+
+    public override void _GuiInput(InputEvent @event)
+    {
+        if (!_interactive || !_affordable) return;
+        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        {
+            EmitSignal(SignalName.CardClicked, _tier, _marketIndex);
+            AcceptEvent();
+        }
     }
 
     public override Vector2 _GetMinimumSize() => new(120, 180);
@@ -61,7 +86,14 @@ public partial class CardDisplay : PanelContainer
                 cost.ToString(), HorizontalAlignment.Left, -1, 16, textColor);
         }
 
-        // Border
-        DrawRect(rect, new Color(0.4f, 0.4f, 0.4f), false, 1);
+        // Border — green if affordable, dim if not
+        if (_interactive && _affordable)
+        {
+            DrawRect(rect, new Color(0.2f, 0.9f, 0.3f), false, 3);
+        }
+        else
+        {
+            DrawRect(rect, new Color(0.4f, 0.4f, 0.4f), false, 1);
+        }
     }
 }

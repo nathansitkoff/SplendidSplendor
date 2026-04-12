@@ -10,6 +10,7 @@ public static class ActionValidator
         {
             GameAction.TakeThreeGemsAction a => IsValidTakeThree(state, a),
             GameAction.TakeTwoGemsAction a => IsValidTakeTwo(state, a),
+            GameAction.PurchaseCardAction a => IsValidPurchase(state, a),
             _ => false
         };
     }
@@ -54,6 +55,36 @@ public static class ActionValidator
             return false;
 
         return true;
+    }
+
+    private static bool IsValidPurchase(GameState state, GameAction.PurchaseCardAction action)
+    {
+        if (action.Tier < 0 || action.Tier > 2)
+            return false;
+        if (action.MarketIndex < 0 || action.MarketIndex >= state.TierMarket[action.Tier].Count)
+            return false;
+
+        var card = state.TierMarket[action.Tier][action.MarketIndex];
+        return CanAffordCard(state.CurrentPlayer, card);
+    }
+
+    public static bool CanAffordCard(PlayerState player, Card card)
+    {
+        int goldNeeded = 0;
+        var bonuses = player.Bonuses;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+
+        foreach (var type in gemTypes)
+        {
+            int cost = card.Cost[type];
+            int discount = bonuses[type];
+            int effectiveCost = Math.Max(0, cost - discount);
+            int shortfall = effectiveCost - player.Gems[type];
+            if (shortfall > 0)
+                goldNeeded += shortfall;
+        }
+
+        return goldNeeded <= player.Gems[GemType.Gold];
     }
 
     private static int CountAvailableColors(GameState state)
