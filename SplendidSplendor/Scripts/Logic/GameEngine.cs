@@ -59,6 +59,36 @@ public static class GameEngine
         return state;
     }
 
+    public static void ApplyAction(GameState state, GameAction action)
+    {
+        if (!ActionValidator.IsValid(state, action))
+            throw new InvalidOperationException("Invalid action");
+
+        switch (action)
+        {
+            case GameAction.TakeThreeGemsAction a:
+                ApplyTakeThreeGems(state, a);
+                break;
+        }
+
+        AdvanceTurn(state);
+    }
+
+    private static void ApplyTakeThreeGems(GameState state, GameAction.TakeThreeGemsAction action)
+    {
+        var player = state.CurrentPlayer;
+        foreach (var color in action.Colors)
+        {
+            state.Bank[color]--;
+            player.Gems[color]++;
+        }
+    }
+
+    private static void AdvanceTurn(GameState state)
+    {
+        state.CurrentPlayerIndex = (state.CurrentPlayerIndex + 1) % state.Players.Count;
+    }
+
     private static void Shuffle<T>(List<T> list)
     {
         for (int i = list.Count - 1; i > 0; i--)

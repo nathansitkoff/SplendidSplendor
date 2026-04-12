@@ -14,6 +14,10 @@ public partial class GameBoard : Control
     private GemBank _gemBank = null!;
     private VBoxContainer _playersArea = null!;
     private Label _titleLabel = null!;
+    private HBoxContainer _actionBar = null!;
+    private Button _confirmButton = null!;
+    private Button _cancelButton = null!;
+    private Label _actionLabel = null!;
 
     public override void _Ready()
     {
@@ -52,14 +56,30 @@ public partial class GameBoard : Control
 
         // Gem bank
         var bankSection = new VBoxContainer();
-        var bankLabel = new Label { Text = "GEM BANK" };
+        var bankLabel = new Label { Text = "GEM BANK (click to select)" };
         bankLabel.AddThemeColorOverride("font_color", Colors.Gray);
         bankLabel.AddThemeFontSizeOverride("font_size", 11);
         bankSection.AddChild(bankLabel);
         _gemBank = new GemBank();
+        _gemBank.SelectionChanged += OnGemSelectionChanged;
         bankSection.AddChild(_gemBank);
-        topRow.AddChild(bankSection);
 
+        // Action bar (confirm/cancel)
+        _actionBar = new HBoxContainer();
+        _actionBar.AddThemeConstantOverride("separation", 8);
+        _actionLabel = new Label { Text = "" };
+        _actionLabel.AddThemeColorOverride("font_color", Colors.Yellow);
+        _actionLabel.AddThemeFontSizeOverride("font_size", 14);
+        _actionBar.AddChild(_actionLabel);
+        _confirmButton = new Button { Text = "Confirm", Visible = false };
+        _confirmButton.Pressed += OnConfirmPressed;
+        _actionBar.AddChild(_confirmButton);
+        _cancelButton = new Button { Text = "Cancel", Visible = false };
+        _cancelButton.Pressed += OnCancelPressed;
+        _actionBar.AddChild(_cancelButton);
+        bankSection.AddChild(_actionBar);
+
+        topRow.AddChild(bankSection);
         root.AddChild(topRow);
 
         // Main area: market on left, players on right
@@ -113,6 +133,58 @@ public partial class GameBoard : Control
         AddChild(margin);
     }
 
+    private void OnGemSelectionChanged()
+    {
+        var selected = _gemBank.SelectedGems;
+        if (selected.Count > 0)
+        {
+            var action = GameAction.TakeThreeGems(selected.ToArray());
+            bool valid = ActionValidator.IsValid(_state, action);
+            _actionLabel.Text = $"Take gems: {string.Join(", ", selected.Select(g => GemColors.GetLabel(g)))}";
+            _confirmButton.Visible = true;
+            _confirmButton.Disabled = !valid;
+            _cancelButton.Visible = true;
+
+            if (!valid)
+            {
+                // Provide hint about why
+                int availableColors = 0;
+                var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+                foreach (var t in gemTypes)
+                    if (_state.Bank[t] > 0) availableColors++;
+                int needed = Math.Min(3, availableColors);
+                if (selected.Count < needed)
+                    _actionLabel.Text += $" (select {needed})";
+            }
+        }
+        else
+        {
+            _actionLabel.Text = "";
+            _confirmButton.Visible = false;
+            _cancelButton.Visible = false;
+        }
+    }
+
+    private void OnConfirmPressed()
+    {
+        var selected = _gemBank.SelectedGems;
+        if (selected.Count == 0) return;
+
+        var action = GameAction.TakeThreeGems(selected.ToArray());
+        if (!ActionValidator.IsValid(_state, action)) return;
+
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+    }
+
+    private void OnCancelPressed()
+    {
+        _gemBank.ClearSelection();
+        _actionLabel.Text = "";
+        _confirmButton.Visible = false;
+        _cancelButton.Visible = false;
+    }
+
     private void RefreshDisplay()
     {
         // Update title
@@ -160,8 +232,11 @@ public partial class GameBoard : Control
             }
         }
 
-        // Update gem bank
-        _gemBank.SetBank(_state.Bank);
+        // Update gem bank (interactive)
+        _gemBank.SetBank(_state.Bank, interactive: true);
+        _actionLabel.Text = "";
+        _confirmButton.Visible = false;
+        _cancelButton.Visible = false;
 
         // Update players
         var children = _playersArea.GetChildren();
