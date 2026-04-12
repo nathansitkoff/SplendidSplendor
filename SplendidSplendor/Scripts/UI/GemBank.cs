@@ -8,23 +8,27 @@ public partial class GemBank : HBoxContainer
     private GemCollection _bank = new();
     private bool _interactive;
     private readonly HashSet<GemType> _selected = new();
+    private GemType? _takeTwoColor;
 
     [Signal]
     public delegate void SelectionChangedEventHandler();
 
     public IReadOnlyCollection<GemType> SelectedGems => _selected;
+    public GemType? TakeTwoColor => _takeTwoColor;
 
     public void SetBank(GemCollection bank, bool interactive = false)
     {
         _bank = bank;
         _interactive = interactive;
         _selected.Clear();
+        _takeTwoColor = null;
         UpdateDisplay();
     }
 
     public void ClearSelection()
     {
         _selected.Clear();
+        _takeTwoColor = null;
         UpdateDisplay();
     }
 
@@ -42,10 +46,10 @@ public partial class GemBank : HBoxContainer
 
         foreach (var type in gemTypes)
         {
-            // Don't show gold as selectable for take-gems action
             bool isInteractive = _interactive && type != GemType.Gold;
+            bool isSelected = _selected.Contains(type) || _takeTwoColor == type;
             var gem = new GemToken();
-            gem.SetGem(type, _bank[type], isInteractive, _selected.Contains(type));
+            gem.SetGem(type, _bank[type], isInteractive, isSelected);
             gem.CustomMinimumSize = new Vector2(72, 40);
             gem.GemClicked += OnGemClicked;
             AddChild(gem);
@@ -56,9 +60,24 @@ public partial class GemBank : HBoxContainer
     {
         var type = (GemType)gemType;
 
-        if (_selected.Contains(type))
+        if (_takeTwoColor != null)
         {
-            _selected.Remove(type);
+            // Already in take-2 mode — clicking again cancels
+            _takeTwoColor = null;
+        }
+        else if (_selected.Contains(type))
+        {
+            // Clicking an already-selected gem: try take-2 mode
+            if (_bank[type] >= 4)
+            {
+                _selected.Clear();
+                _takeTwoColor = type;
+            }
+            else
+            {
+                // Can't take 2, just deselect
+                _selected.Remove(type);
+            }
         }
         else if (_selected.Count < 3)
         {

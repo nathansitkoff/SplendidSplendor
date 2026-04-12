@@ -133,29 +133,46 @@ public partial class GameBoard : Control
         AddChild(margin);
     }
 
-    private void OnGemSelectionChanged()
+    private GameAction? BuildCurrentAction()
     {
+        var takeTwoColor = _gemBank.TakeTwoColor;
+        if (takeTwoColor != null)
+            return GameAction.TakeTwoGems(takeTwoColor.Value);
+
         var selected = _gemBank.SelectedGems;
         if (selected.Count > 0)
+            return GameAction.TakeThreeGems(selected.ToArray());
+
+        return null;
+    }
+
+    private void OnGemSelectionChanged()
+    {
+        var action = BuildCurrentAction();
+        if (action != null)
         {
-            var action = GameAction.TakeThreeGems(selected.ToArray());
             bool valid = ActionValidator.IsValid(_state, action);
-            _actionLabel.Text = $"Take gems: {string.Join(", ", selected.Select(g => GemColors.GetLabel(g)))}";
+
+            if (action is GameAction.TakeTwoGemsAction t2)
+                _actionLabel.Text = $"Take 2x {GemColors.GetLabel(t2.Color)}";
+            else if (action is GameAction.TakeThreeGemsAction t3)
+            {
+                _actionLabel.Text = $"Take gems: {string.Join(", ", t3.Colors.Select(g => GemColors.GetLabel(g)))}";
+                if (!valid)
+                {
+                    int availableColors = 0;
+                    var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+                    foreach (var t in gemTypes)
+                        if (_state.Bank[t] > 0) availableColors++;
+                    int needed = Math.Min(3, availableColors);
+                    if (t3.Colors.Count < needed)
+                        _actionLabel.Text += $" (select {needed})";
+                }
+            }
+
             _confirmButton.Visible = true;
             _confirmButton.Disabled = !valid;
             _cancelButton.Visible = true;
-
-            if (!valid)
-            {
-                // Provide hint about why
-                int availableColors = 0;
-                var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
-                foreach (var t in gemTypes)
-                    if (_state.Bank[t] > 0) availableColors++;
-                int needed = Math.Min(3, availableColors);
-                if (selected.Count < needed)
-                    _actionLabel.Text += $" (select {needed})";
-            }
         }
         else
         {
@@ -167,10 +184,8 @@ public partial class GameBoard : Control
 
     private void OnConfirmPressed()
     {
-        var selected = _gemBank.SelectedGems;
-        if (selected.Count == 0) return;
-
-        var action = GameAction.TakeThreeGems(selected.ToArray());
+        var action = BuildCurrentAction();
+        if (action == null) return;
         if (!ActionValidator.IsValid(_state, action)) return;
 
         GameEngine.ApplyAction(_state, action);

@@ -69,6 +69,9 @@ public static class GameEngine
             case GameAction.TakeThreeGemsAction a:
                 ApplyTakeThreeGems(state, a);
                 break;
+            case GameAction.TakeTwoGemsAction a:
+                ApplyTakeTwoGems(state, a);
+                break;
         }
 
         AdvanceTurn(state);
@@ -82,6 +85,13 @@ public static class GameEngine
             state.Bank[color]--;
             player.Gems[color]++;
         }
+    }
+
+    private static void ApplyTakeTwoGems(GameState state, GameAction.TakeTwoGemsAction action)
+    {
+        var player = state.CurrentPlayer;
+        state.Bank[action.Color] -= 2;
+        player.Gems[action.Color] += 2;
     }
 
     private static void AdvanceTurn(GameState state)

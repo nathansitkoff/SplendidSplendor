@@ -9,6 +9,7 @@ public static class ActionValidator
         return action switch
         {
             GameAction.TakeThreeGemsAction a => IsValidTakeThree(state, a),
+            GameAction.TakeTwoGemsAction a => IsValidTakeTwo(state, a),
             _ => false
         };
     }
@@ -37,6 +38,19 @@ public static class ActionValidator
         int availableColors = CountAvailableColors(state);
         int maxCanTake = Math.Min(3, availableColors);
         if (colors.Count != maxCanTake)
+            return false;
+
+        return true;
+    }
+
+    private static bool IsValidTakeTwo(GameState state, GameAction.TakeTwoGemsAction action)
+    {
+        // No gold
+        if (action.Color == GemType.Gold)
+            return false;
+
+        // Must have 4 or more of that color
+        if (state.Bank[action.Color] < 4)
             return false;
 
         return true;
