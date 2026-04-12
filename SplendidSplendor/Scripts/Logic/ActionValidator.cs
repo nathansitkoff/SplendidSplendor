@@ -11,6 +11,8 @@ public static class ActionValidator
             GameAction.TakeThreeGemsAction a => IsValidTakeThree(state, a),
             GameAction.TakeTwoGemsAction a => IsValidTakeTwo(state, a),
             GameAction.PurchaseCardAction a => IsValidPurchase(state, a),
+            GameAction.ReserveCardAction a => IsValidReserve(state, a),
+            GameAction.PurchaseReservedAction a => IsValidPurchaseReserved(state, a),
             _ => false
         };
     }
@@ -85,6 +87,34 @@ public static class ActionValidator
         }
 
         return goldNeeded <= player.Gems[GemType.Gold];
+    }
+
+    private static bool IsValidReserve(GameState state, GameAction.ReserveCardAction action)
+    {
+        if (state.CurrentPlayer.ReservedCards.Count >= 3)
+            return false;
+
+        if (action.Tier < 0 || action.Tier > 2)
+            return false;
+
+        if (action.MarketIndex == null)
+        {
+            // Reserve from deck top — deck must not be empty
+            return state.TierDecks[action.Tier].Count > 0;
+        }
+
+        // Reserve from market
+        return action.MarketIndex >= 0 && action.MarketIndex < state.TierMarket[action.Tier].Count;
+    }
+
+    private static bool IsValidPurchaseReserved(GameState state, GameAction.PurchaseReservedAction action)
+    {
+        var player = state.CurrentPlayer;
+        if (action.ReserveIndex < 0 || action.ReserveIndex >= player.ReservedCards.Count)
+            return false;
+
+        var card = player.ReservedCards[action.ReserveIndex];
+        return CanAffordCard(player, card);
     }
 
     private static int CountAvailableColors(GameState state)

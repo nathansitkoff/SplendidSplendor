@@ -82,14 +82,10 @@ public partial class GameBoard : Control
         topRow.AddChild(bankSection);
         root.AddChild(topRow);
 
-        // Main area: market on left, players on right
-        var mainArea = new HBoxContainer();
-        mainArea.SizeFlagsVertical = SizeFlags.ExpandFill;
-        mainArea.AddThemeConstantOverride("separation", 16);
-
         // Card market
         _marketArea = new VBoxContainer();
         _marketArea.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _marketArea.SizeFlagsVertical = SizeFlags.ExpandFill;
         _marketArea.AddThemeConstantOverride("separation", 2);
 
         var tierLabels = new[] { "TIER III", "TIER II", "TIER I" };
@@ -108,29 +104,39 @@ public partial class GameBoard : Control
             tierSection.AddChild(cardRow);
             _marketArea.AddChild(tierSection);
         }
-        mainArea.AddChild(_marketArea);
+        root.AddChild(_marketArea);
 
-        // Players
-        _playersArea = new VBoxContainer();
-        _playersArea.AddThemeConstantOverride("separation", 6);
-        _playersArea.CustomMinimumSize = new Vector2(280, 0);
-        var playersLabel = new Label { Text = "PLAYERS" };
-        playersLabel.AddThemeColorOverride("font_color", Colors.Gray);
-        playersLabel.AddThemeFontSizeOverride("font_size", 11);
-        _playersArea.AddChild(playersLabel);
-        mainArea.AddChild(_playersArea);
-
-        root.AddChild(mainArea);
-
-        // Margin wrapper
+        // Margin wrapper for left side (title, nobles, bank, market)
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_right", 12);
+        margin.AddThemeConstantOverride("margin_right", 430);
         margin.AddThemeConstantOverride("margin_top", 8);
         margin.AddThemeConstantOverride("margin_bottom", 8);
         margin.AddChild(root);
         AddChild(margin);
+
+        // Players panel — absolutely positioned, anchored top-right, full height
+        var playerPanel = new ScrollContainer();
+        playerPanel.AnchorLeft = 1.0f;
+        playerPanel.AnchorRight = 1.0f;
+        playerPanel.AnchorTop = 0.0f;
+        playerPanel.AnchorBottom = 1.0f;
+        playerPanel.OffsetLeft = -420;
+        playerPanel.OffsetRight = -8;
+        playerPanel.OffsetTop = 8;
+        playerPanel.OffsetBottom = -8;
+        playerPanel.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+
+        _playersArea = new VBoxContainer();
+        _playersArea.AddThemeConstantOverride("separation", 6);
+        _playersArea.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        var playersLabel = new Label { Text = "PLAYERS" };
+        playersLabel.AddThemeColorOverride("font_color", Colors.Gray);
+        playersLabel.AddThemeFontSizeOverride("font_size", 11);
+        _playersArea.AddChild(playersLabel);
+        playerPanel.AddChild(_playersArea);
+        AddChild(playerPanel);
     }
 
     private GameAction? BuildCurrentAction()
@@ -201,6 +207,24 @@ public partial class GameBoard : Control
         RefreshDisplay();
     }
 
+    private void OnCardReserved(int tier, int marketIndex)
+    {
+        var action = GameAction.ReserveCard(tier, marketIndex);
+        if (!ActionValidator.IsValid(_state, action)) return;
+
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+    }
+
+    private void OnReservedCardClicked(int reserveIndex)
+    {
+        var action = GameAction.PurchaseReserved(reserveIndex);
+        if (!ActionValidator.IsValid(_state, action)) return;
+
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+    }
+
     private void OnCancelPressed()
     {
         _gemBank.ClearSelection();
@@ -255,6 +279,7 @@ public partial class GameBoard : Control
                 bool affordable = card != null && ActionValidator.CanAffordCard(_state.CurrentPlayer, card);
                 cardDisplay.SetCard(card, interactive: true, affordable: affordable, tier: tier, marketIndex: i);
                 cardDisplay.CardClicked += OnCardClicked;
+                cardDisplay.CardReserved += OnCardReserved;
             }
         }
 
@@ -276,6 +301,37 @@ public partial class GameBoard : Control
             panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             _playersArea.AddChild(panel);
             panel.SetPlayer(_state.Players[i], i, i == _state.CurrentPlayerIndex);
+
+            // Show reserved cards for all players
+            if (_state.Players[i].ReservedCards.Count > 0)
+            {
+                bool isCurrentPlayer = i == _state.CurrentPlayerIndex;
+                var reserveLabel = new Label
+                {
+                    Text = isCurrentPlayer ? "RESERVED (click to buy)" : "RESERVED"
+                };
+                reserveLabel.AddThemeColorOverride("font_color", Colors.Gray);
+                reserveLabel.AddThemeFontSizeOverride("font_size", 10);
+                _playersArea.AddChild(reserveLabel);
+
+                var reserveRow = new HBoxContainer();
+                reserveRow.AddThemeConstantOverride("separation", 4);
+                for (int j = 0; j < _state.Players[i].ReservedCards.Count; j++)
+                {
+                    var rCard = _state.Players[i].ReservedCards[j];
+                    var rDisplay = new CardDisplay();
+                    rDisplay.CustomMinimumSize = new Vector2(120, 180);
+                    bool canBuy = isCurrentPlayer && ActionValidator.CanAffordCard(_state.CurrentPlayer, rCard);
+                    rDisplay.SetCard(rCard, interactive: isCurrentPlayer, affordable: canBuy, tier: 0, marketIndex: j);
+                    if (isCurrentPlayer)
+                    {
+                        int reserveIdx = j;
+                        rDisplay.CardClicked += (_, _) => OnReservedCardClicked(reserveIdx);
+                    }
+                    reserveRow.AddChild(rDisplay);
+                }
+                _playersArea.AddChild(reserveRow);
+            }
         }
     }
 }

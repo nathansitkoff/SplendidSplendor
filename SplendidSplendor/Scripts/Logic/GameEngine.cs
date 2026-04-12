@@ -75,6 +75,12 @@ public static class GameEngine
             case GameAction.PurchaseCardAction a:
                 ApplyPurchaseCard(state, a);
                 break;
+            case GameAction.ReserveCardAction a:
+                ApplyReserveCard(state, a);
+                break;
+            case GameAction.PurchaseReservedAction a:
+                ApplyPurchaseReserved(state, a);
+                break;
         }
 
         AdvanceTurn(state);
@@ -133,6 +139,70 @@ public static class GameEngine
             state.TierDecks[action.Tier].RemoveAt(0);
             state.TierMarket[action.Tier].Add(replacement);
         }
+    }
+
+    private static void ApplyReserveCard(GameState state, GameAction.ReserveCardAction action)
+    {
+        var player = state.CurrentPlayer;
+        Card card;
+
+        if (action.MarketIndex == null)
+        {
+            // Take from deck top
+            card = state.TierDecks[action.Tier][0];
+            state.TierDecks[action.Tier].RemoveAt(0);
+        }
+        else
+        {
+            // Take from market and refill
+            card = state.TierMarket[action.Tier][action.MarketIndex.Value];
+            state.TierMarket[action.Tier].RemoveAt(action.MarketIndex.Value);
+            if (state.TierDecks[action.Tier].Count > 0)
+            {
+                var replacement = state.TierDecks[action.Tier][0];
+                state.TierDecks[action.Tier].RemoveAt(0);
+                state.TierMarket[action.Tier].Add(replacement);
+            }
+        }
+
+        player.ReservedCards.Add(card);
+
+        // Give gold if available
+        if (state.Bank[GemType.Gold] > 0)
+        {
+            state.Bank[GemType.Gold]--;
+            player.Gems[GemType.Gold]++;
+        }
+    }
+
+    private static void ApplyPurchaseReserved(GameState state, GameAction.PurchaseReservedAction action)
+    {
+        var player = state.CurrentPlayer;
+        var card = player.ReservedCards[action.ReserveIndex];
+        var bonuses = player.Bonuses;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black };
+
+        // Pay for the card (same logic as market purchase)
+        int goldSpent = 0;
+        foreach (var type in gemTypes)
+        {
+            int cost = card.Cost[type];
+            int discount = bonuses[type];
+            int effectiveCost = Math.Max(0, cost - discount);
+            int gemsToSpend = Math.Min(effectiveCost, player.Gems[type]);
+            int remainder = effectiveCost - gemsToSpend;
+
+            player.Gems[type] -= gemsToSpend;
+            state.Bank[type] += gemsToSpend;
+            goldSpent += remainder;
+        }
+
+        player.Gems[GemType.Gold] -= goldSpent;
+        state.Bank[GemType.Gold] += goldSpent;
+
+        // Move card from reserved to owned
+        player.ReservedCards.RemoveAt(action.ReserveIndex);
+        player.OwnedCards.Add(card);
     }
 
     private static void AdvanceTurn(GameState state)

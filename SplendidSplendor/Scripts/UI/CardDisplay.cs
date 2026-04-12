@@ -12,6 +12,9 @@ public partial class CardDisplay : PanelContainer
     [Signal]
     public delegate void CardClickedEventHandler(int tier, int marketIndex);
 
+    [Signal]
+    public delegate void CardReservedEventHandler(int tier, int marketIndex);
+
     private int _tier;
     private int _marketIndex;
 
@@ -30,11 +33,19 @@ public partial class CardDisplay : PanelContainer
 
     public override void _GuiInput(InputEvent @event)
     {
-        if (!_interactive || !_affordable) return;
-        if (@event is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        if (!_interactive) return;
+        if (@event is InputEventMouseButton mb && mb.Pressed)
         {
-            EmitSignal(SignalName.CardClicked, _tier, _marketIndex);
-            AcceptEvent();
+            if (mb.ButtonIndex == MouseButton.Left && _affordable)
+            {
+                EmitSignal(SignalName.CardClicked, _tier, _marketIndex);
+                AcceptEvent();
+            }
+            else if (mb.ButtonIndex == MouseButton.Right)
+            {
+                EmitSignal(SignalName.CardReserved, _tier, _marketIndex);
+                AcceptEvent();
+            }
         }
     }
 
