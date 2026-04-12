@@ -22,9 +22,11 @@ public partial class GameBoard : Control
     private PanelContainer _victoryPanel = null!;
     private Label _victoryLabel = null!;
 
+    public int PlayerCount { get; set; } = 2;
+
     public override void _Ready()
     {
-        _state = GameEngine.SetupGame(2);
+        _state = GameEngine.SetupGame(PlayerCount);
         BuildLayout();
         RefreshDisplay();
     }
