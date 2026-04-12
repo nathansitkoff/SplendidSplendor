@@ -17,7 +17,7 @@ public partial class PlayerPanel : PanelContainer
         QueueRedraw();
     }
 
-    public override Vector2 _GetMinimumSize() => new(260, 200);
+    public override Vector2 _GetMinimumSize() => new(220, 180);
 
     public override void _Draw()
     {

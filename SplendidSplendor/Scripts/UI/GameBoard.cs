@@ -113,7 +113,7 @@ public partial class GameBoard : Control
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_right", 430);
+        margin.AddThemeConstantOverride("margin_right", 640);
         margin.AddThemeConstantOverride("margin_top", 8);
         margin.AddThemeConstantOverride("margin_bottom", 8);
         margin.AddChild(root);
@@ -125,7 +125,7 @@ public partial class GameBoard : Control
         playerPanel.AnchorRight = 1.0f;
         playerPanel.AnchorTop = 0.0f;
         playerPanel.AnchorBottom = 1.0f;
-        playerPanel.OffsetLeft = -420;
+        playerPanel.OffsetLeft = -630;
         playerPanel.OffsetRight = -8;
         playerPanel.OffsetTop = 8;
         playerPanel.OffsetBottom = -8;
@@ -385,31 +385,25 @@ public partial class GameBoard : Control
 
         for (int i = 0; i < _state.Players.Count; i++)
         {
-            var panel = new PlayerPanel();
-            panel.CustomMinimumSize = new Vector2(280, 200);
-            panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            _playersArea.AddChild(panel);
-            panel.SetPlayer(_state.Players[i], i, i == _state.CurrentPlayerIndex);
+            bool isCurrentPlayer = i == _state.CurrentPlayerIndex;
 
-            // Show reserved cards for all players
-            if (_state.Players[i].ReservedCards.Count > 0)
+            // Each player is a row: [reserved cards] [player info panel]
+            var playerRow = new HBoxContainer();
+            playerRow.AddThemeConstantOverride("separation", 6);
+            playerRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+
+            // Reserved cards on the left (always reserve the space for 3 slots
+            // so player panels align vertically)
+            var reserveRow = new HBoxContainer();
+            reserveRow.AddThemeConstantOverride("separation", 4);
+            reserveRow.CustomMinimumSize = new Vector2(372, 180); // 3 * 120 + 2 * 4 + padding
+            for (int j = 0; j < 3; j++)
             {
-                bool isCurrentPlayer = i == _state.CurrentPlayerIndex;
-                var reserveLabel = new Label
-                {
-                    Text = isCurrentPlayer ? "RESERVED (click to buy)" : "RESERVED"
-                };
-                reserveLabel.AddThemeColorOverride("font_color", Colors.Gray);
-                reserveLabel.AddThemeFontSizeOverride("font_size", 10);
-                _playersArea.AddChild(reserveLabel);
-
-                var reserveRow = new HBoxContainer();
-                reserveRow.AddThemeConstantOverride("separation", 4);
-                for (int j = 0; j < _state.Players[i].ReservedCards.Count; j++)
+                var rDisplay = new CardDisplay();
+                rDisplay.CustomMinimumSize = new Vector2(120, 180);
+                if (j < _state.Players[i].ReservedCards.Count)
                 {
                     var rCard = _state.Players[i].ReservedCards[j];
-                    var rDisplay = new CardDisplay();
-                    rDisplay.CustomMinimumSize = new Vector2(120, 180);
                     bool canBuy = isCurrentPlayer && ActionValidator.CanAffordCard(_state.CurrentPlayer, rCard);
                     rDisplay.SetCard(rCard, interactive: isCurrentPlayer, affordable: canBuy, tier: 0, marketIndex: j);
                     if (isCurrentPlayer)
@@ -417,10 +411,23 @@ public partial class GameBoard : Control
                         int reserveIdx = j;
                         rDisplay.CardClicked += (_, _) => OnReservedCardClicked(reserveIdx);
                     }
-                    reserveRow.AddChild(rDisplay);
                 }
-                _playersArea.AddChild(reserveRow);
+                else
+                {
+                    rDisplay.SetCard(null);
+                }
+                reserveRow.AddChild(rDisplay);
             }
+            playerRow.AddChild(reserveRow);
+
+            // Player info panel on the right (narrower)
+            var panel = new PlayerPanel();
+            panel.CustomMinimumSize = new Vector2(220, 180);
+            panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            panel.SetPlayer(_state.Players[i], i, isCurrentPlayer);
+            playerRow.AddChild(panel);
+
+            _playersArea.AddChild(playerRow);
         }
     }
 }
