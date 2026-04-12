@@ -196,11 +196,9 @@ public class PurchaseCardTests
     public void Buy_card_advances_turn()
     {
         var state = CreateGame();
-        state.CurrentPlayer.Gems[GemType.White] = 10;
-        state.CurrentPlayer.Gems[GemType.Blue] = 10;
-        state.CurrentPlayer.Gems[GemType.Green] = 10;
-        state.CurrentPlayer.Gems[GemType.Red] = 10;
-        state.CurrentPlayer.Gems[GemType.Black] = 10;
+        var card = MakeCard(1, GemType.Blue, 0, new GemCollection { [GemType.White] = 2 });
+        state.TierMarket[0] = new List<Card> { card };
+        state.CurrentPlayer.Gems[GemType.White] = 2;
 
         GameEngine.ApplyAction(state, GameAction.PurchaseCard(0, 0));
         Assert.Equal(1, state.CurrentPlayerIndex);

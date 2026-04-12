@@ -6,6 +6,12 @@ public static class ActionValidator
 {
     public static bool IsValid(GameState state, GameAction action)
     {
+        // During discard state, only discard is valid
+        if (state.NeedsDiscard)
+        {
+            return action is GameAction.DiscardGemsAction d && IsValidDiscard(state, d);
+        }
+
         return action switch
         {
             GameAction.TakeThreeGemsAction a => IsValidTakeThree(state, a),
@@ -115,6 +121,23 @@ public static class ActionValidator
 
         var card = player.ReservedCards[action.ReserveIndex];
         return CanAffordCard(player, card);
+    }
+
+    private static bool IsValidDiscard(GameState state, GameAction.DiscardGemsAction action)
+    {
+        var player = state.CurrentPlayer;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black, GemType.Gold };
+
+        // Can't discard more than you have of any type
+        foreach (var type in gemTypes)
+        {
+            if (action.Gems[type] > player.Gems[type])
+                return false;
+        }
+
+        // Must bring total to exactly 10
+        int totalAfter = player.Gems.Total - action.Gems.Total;
+        return totalAfter == 10;
     }
 
     private static int CountAvailableColors(GameState state)

@@ -66,6 +66,11 @@ public static class GameEngine
 
         switch (action)
         {
+            case GameAction.DiscardGemsAction a:
+                ApplyDiscard(state, a);
+                state.NeedsDiscard = false;
+                AdvanceTurn(state);
+                return;
             case GameAction.TakeThreeGemsAction a:
                 ApplyTakeThreeGems(state, a);
                 break;
@@ -81,6 +86,13 @@ public static class GameEngine
             case GameAction.PurchaseReservedAction a:
                 ApplyPurchaseReserved(state, a);
                 break;
+        }
+
+        // Check if player needs to discard (>10 tokens)
+        if (state.CurrentPlayer.Gems.Total > 10)
+        {
+            state.NeedsDiscard = true;
+            return; // Don't advance turn yet
         }
 
         AdvanceTurn(state);
@@ -203,6 +215,21 @@ public static class GameEngine
         // Move card from reserved to owned
         player.ReservedCards.RemoveAt(action.ReserveIndex);
         player.OwnedCards.Add(card);
+    }
+
+    private static void ApplyDiscard(GameState state, GameAction.DiscardGemsAction action)
+    {
+        var player = state.CurrentPlayer;
+        var gemTypes = new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black, GemType.Gold };
+        foreach (var type in gemTypes)
+        {
+            int amount = action.Gems[type];
+            if (amount > 0)
+            {
+                player.Gems[type] -= amount;
+                state.Bank[type] += amount;
+            }
+        }
     }
 
     private static void AdvanceTurn(GameState state)

@@ -18,6 +18,7 @@ public partial class GameBoard : Control
     private Button _confirmButton = null!;
     private Button _cancelButton = null!;
     private Label _actionLabel = null!;
+    private DiscardPanel _discardPanel = null!;
 
     public override void _Ready()
     {
@@ -137,6 +138,24 @@ public partial class GameBoard : Control
         _playersArea.AddChild(playersLabel);
         playerPanel.AddChild(_playersArea);
         AddChild(playerPanel);
+
+        // Discard panel — centered overlay, hidden by default
+        _discardPanel = new DiscardPanel();
+        _discardPanel.Visible = false;
+        _discardPanel.AnchorLeft = 0.15f;
+        _discardPanel.AnchorRight = 0.65f;
+        _discardPanel.AnchorTop = 0.35f;
+        _discardPanel.AnchorBottom = 0.65f;
+        _discardPanel.DiscardConfirmed += OnDiscardConfirmed;
+        // Dark background
+        _discardPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(0.1f, 0.1f, 0.15f, 0.95f),
+            BorderWidthLeft = 2, BorderWidthRight = 2,
+            BorderWidthTop = 2, BorderWidthBottom = 2,
+            BorderColor = Colors.Yellow
+        });
+        AddChild(_discardPanel);
     }
 
     private GameAction? BuildCurrentAction()
@@ -225,6 +244,16 @@ public partial class GameBoard : Control
         RefreshDisplay();
     }
 
+    private void OnDiscardConfirmed()
+    {
+        var gems = _discardPanel.GetDiscardSelection();
+        var action = GameAction.DiscardGems(gems);
+        if (!ActionValidator.IsValid(_state, action)) return;
+
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+    }
+
     private void OnCancelPressed()
     {
         _gemBank.ClearSelection();
@@ -235,8 +264,22 @@ public partial class GameBoard : Control
 
     private void RefreshDisplay()
     {
+        // Discard panel
+        if (_state.NeedsDiscard)
+        {
+            _discardPanel.Setup(_state.CurrentPlayer);
+            _discardPanel.Visible = true;
+        }
+        else
+        {
+            _discardPanel.Visible = false;
+        }
+
         // Update title
-        _titleLabel.Text = $"Splendid Splendor — Player {_state.CurrentPlayerIndex + 1}'s Turn";
+        var turnText = _state.NeedsDiscard
+            ? $"Player {_state.CurrentPlayerIndex + 1} — Discard gems!"
+            : $"Player {_state.CurrentPlayerIndex + 1}'s Turn";
+        _titleLabel.Text = $"Splendid Splendor — {turnText}";
 
         // Update nobles
         foreach (var child in _noblesRow.GetChildren())

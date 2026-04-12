@@ -17,6 +17,9 @@ public abstract class GameAction
     public static PurchaseReservedAction PurchaseReserved(int reserveIndex)
         => new(reserveIndex);
 
+    public static DiscardGemsAction DiscardGems(GemCollection gems)
+        => new(gems);
+
     private GameAction() { }
 
     public class TakeThreeGemsAction : GameAction
@@ -57,5 +60,11 @@ public abstract class GameAction
     {
         public int ReserveIndex { get; }
         public PurchaseReservedAction(int reserveIndex) => ReserveIndex = reserveIndex;
+    }
+
+    public class DiscardGemsAction : GameAction
+    {
+        public GemCollection Gems { get; }
+        public DiscardGemsAction(GemCollection gems) => Gems = gems;
     }
 }
