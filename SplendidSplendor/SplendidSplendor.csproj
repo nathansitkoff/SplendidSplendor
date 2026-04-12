@@ -4,6 +4,7 @@
     <RootNamespace>SplendidSplendor</RootNamespace>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**" />

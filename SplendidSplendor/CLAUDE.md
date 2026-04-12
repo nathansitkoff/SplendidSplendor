@@ -20,6 +20,7 @@ SplendidSplendor is a digital implementation of Marc André's board game Splendo
 - Implementation follows the phased plan in `PLAN.md`.
 - Stop after each phase and check in before proceeding to the next.
 - Always ask before pushing to git.
+- **Test-driven development:** Write tests first, then implement code to make them pass.
 - Each phase should be independently testable — unit tests for logic, manual verification for UI.
 
 ## Build & Test
