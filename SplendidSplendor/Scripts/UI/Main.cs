@@ -22,11 +22,15 @@ public partial class Main : Control
         _currentView = menu;
     }
 
-    private void OnStartGame(int playerCount)
+    private void OnStartGame(int playerCount, int[] aiFlags)
     {
         _currentView?.QueueFree();
 
-        var board = new GameBoard { PlayerCount = playerCount };
+        var isAi = new bool[playerCount];
+        for (int i = 0; i < playerCount; i++)
+            isAi[i] = aiFlags[i] == 1;
+
+        var board = new GameBoard { PlayerCount = playerCount, IsAi = isAi };
         board.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(board);
         _currentView = board;

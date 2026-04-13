@@ -11,7 +11,7 @@ public enum PlayerKind
 public partial class MainMenu : Control
 {
     [Signal]
-    public delegate void StartGameEventHandler(int playerCount);
+    public delegate void StartGameEventHandler(int playerCount, int[] aiFlags);
 
     private int _playerCount = 2;
     private readonly PlayerKind[] _playerKinds = new PlayerKind[4]
@@ -112,7 +112,13 @@ public partial class MainMenu : Control
         var startBtn = new Button { Text = "Start Game" };
         startBtn.CustomMinimumSize = new Vector2(0, 50);
         startBtn.AddThemeFontSizeOverride("font_size", 20);
-        startBtn.Pressed += () => EmitSignal(SignalName.StartGame, _playerCount);
+        startBtn.Pressed += () =>
+        {
+            var flags = new int[_playerCount];
+            for (int i = 0; i < _playerCount; i++)
+                flags[i] = _playerKinds[i] == PlayerKind.AI ? 1 : 0;
+            EmitSignal(SignalName.StartGame, _playerCount, flags);
+        };
         content.AddChild(startBtn);
 
         // Initial selection
@@ -150,8 +156,7 @@ public partial class MainMenu : Control
             humanBtn.Pressed += () => SetPlayerKind(idx, PlayerKind.Human);
             row.AddChild(humanBtn);
 
-            var aiBtn = new Button { Text = "AI", ToggleMode = true, Disabled = true };
-            aiBtn.TooltipText = "AI opponents coming soon";
+            var aiBtn = new Button { Text = "AI", ToggleMode = true };
             aiBtn.ButtonPressed = _playerKinds[i] == PlayerKind.AI;
             aiBtn.CustomMinimumSize = new Vector2(80, 32);
             aiBtn.Pressed += () => SetPlayerKind(idx, PlayerKind.AI);

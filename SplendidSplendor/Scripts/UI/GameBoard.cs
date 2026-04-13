@@ -23,12 +23,46 @@ public partial class GameBoard : Control
     private Label _victoryLabel = null!;
 
     public int PlayerCount { get; set; } = 2;
+    public bool[] IsAi { get; set; } = Array.Empty<bool>();
+
+    private Godot.Timer _aiTimer = null!;
 
     public override void _Ready()
     {
         _state = GameEngine.SetupGame(PlayerCount);
         BuildLayout();
+
+        _aiTimer = new Godot.Timer { OneShot = true, WaitTime = 0.8 };
+        _aiTimer.Timeout += OnAiTimerTimeout;
+        AddChild(_aiTimer);
+
         RefreshDisplay();
+        MaybeStartAiTurn();
+    }
+
+    private bool IsCurrentPlayerAi()
+    {
+        return _state.CurrentPlayerIndex < IsAi.Length && IsAi[_state.CurrentPlayerIndex];
+    }
+
+    private void MaybeStartAiTurn()
+    {
+        if (_state.GameOver) return;
+        if (IsCurrentPlayerAi() || _state.NeedsDiscard && IsCurrentPlayerAi())
+        {
+            _aiTimer.Start();
+        }
+    }
+
+    private void OnAiTimerTimeout()
+    {
+        if (_state.GameOver) return;
+        if (!IsCurrentPlayerAi() && !_state.NeedsDiscard) return;
+
+        var action = AiPlayer.ChooseAction(_state);
+        GameEngine.ApplyAction(_state, action);
+        RefreshDisplay();
+        MaybeStartAiTurn();
     }
 
     private void BuildLayout()
@@ -431,5 +465,8 @@ public partial class GameBoard : Control
 
             _playersArea.AddChild(playerRow);
         }
+
+        // If it's an AI's turn (or AI needs to discard), schedule their action
+        MaybeStartAiTurn();
     }
 }
