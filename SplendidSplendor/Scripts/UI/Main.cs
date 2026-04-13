@@ -5,6 +5,8 @@ namespace SplendidSplendor.UI;
 public partial class Main : Control
 {
     private Node? _currentView;
+    private int _lastPlayerCount = 2;
+    private bool[] _lastIsAi = System.Array.Empty<bool>();
 
     public override void _Ready()
     {
@@ -30,8 +32,19 @@ public partial class Main : Control
         for (int i = 0; i < playerCount; i++)
             isAi[i] = aiFlags[i] == 1;
 
-        var board = new GameBoard { PlayerCount = playerCount, IsAi = isAi };
+        _lastPlayerCount = playerCount;
+        _lastIsAi = isAi;
+        StartNewGame();
+    }
+
+    private void StartNewGame()
+    {
+        _currentView?.QueueFree();
+
+        var board = new GameBoard { PlayerCount = _lastPlayerCount, IsAi = _lastIsAi };
         board.SetAnchorsPreset(LayoutPreset.FullRect);
+        board.NewGameRequested += StartNewGame;
+        board.MainMenuRequested += ShowMainMenu;
         AddChild(board);
         _currentView = board;
     }

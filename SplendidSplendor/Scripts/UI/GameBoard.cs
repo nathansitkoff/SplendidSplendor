@@ -21,9 +21,16 @@ public partial class GameBoard : Control
     private DiscardPanel _discardPanel = null!;
     private PanelContainer _victoryPanel = null!;
     private Label _victoryLabel = null!;
+    private ItemList _actionLog = null!;
 
     public int PlayerCount { get; set; } = 2;
     public bool[] IsAi { get; set; } = Array.Empty<bool>();
+
+    [Signal]
+    public delegate void NewGameRequestedEventHandler();
+
+    [Signal]
+    public delegate void MainMenuRequestedEventHandler();
 
     private Godot.Timer _aiTimer = null!;
     private readonly Queue<(Action step, double delay)> _aiSteps = new();
@@ -120,6 +127,93 @@ public partial class GameBoard : Control
         }
     }
 
+    private void ApplyActionWithLog(GameAction action)
+    {
+        int playerIndex = _state.CurrentPlayerIndex;
+        string actor = $"P{playerIndex + 1}";
+        string desc = DescribeAction(_state, action);
+        int noblesBefore = _state.Players[playerIndex].Nobles.Count;
+        int scoreBefore = _state.Players[playerIndex].Score;
+
+        GameEngine.ApplyAction(_state, action);
+        AppendLog($"{actor}: {desc}");
+
+        // Noble visit?
+        int noblesAfter = _state.Players[playerIndex].Nobles.Count;
+        if (noblesAfter > noblesBefore)
+            AppendLog($"{actor}: visited a noble! (+3 VP)");
+
+        if (_state.GameOver)
+        {
+            int winner = GameEngine.GetWinner(_state);
+            AppendLog($"Game over — P{winner + 1} wins!");
+        }
+    }
+
+    private string DescribeAction(GameState state, GameAction action)
+    {
+        return action switch
+        {
+            GameAction.TakeThreeGemsAction t3 => $"took {string.Join(",", t3.Colors.Select(GemLetter))}",
+            GameAction.TakeTwoGemsAction t2 => $"took 2x {GemLetter(t2.Color)}",
+            GameAction.PurchaseCardAction p => $"bought {DescribeCardAt(state, p.Tier, p.MarketIndex)}",
+            GameAction.ReserveCardAction r when r.MarketIndex != null
+                => $"reserved {DescribeCardAt(state, r.Tier, r.MarketIndex.Value)}",
+            GameAction.ReserveCardAction => "reserved from deck",
+            GameAction.PurchaseReservedAction pr
+                => $"bought reserved {DescribeReservedAt(state, pr.ReserveIndex)}",
+            GameAction.DiscardGemsAction d => $"discarded {FormatGemsShort(d.Gems)}",
+            _ => action.GetType().Name
+        };
+    }
+
+    private string DescribeCardAt(GameState state, int tier, int index)
+    {
+        if (tier < 0 || tier > 2) return "card";
+        if (index < 0 || index >= state.TierMarket[tier].Count) return "card";
+        var card = state.TierMarket[tier][index];
+        return $"T{card.Tier}/{GemLetter(card.BonusType)}/{card.Points}pt";
+    }
+
+    private string DescribeReservedAt(GameState state, int index)
+    {
+        var player = state.CurrentPlayer;
+        if (index < 0 || index >= player.ReservedCards.Count) return "reserved";
+        var card = player.ReservedCards[index];
+        return $"T{card.Tier}/{GemLetter(card.BonusType)}/{card.Points}pt";
+    }
+
+    private static string GemLetter(GemType t) => t switch
+    {
+        GemType.White => "W",
+        GemType.Blue => "B",
+        GemType.Green => "G",
+        GemType.Red => "R",
+        GemType.Black => "K",
+        GemType.Gold => "$",
+        _ => "?"
+    };
+
+    private static string FormatGemsShort(GemCollection gems)
+    {
+        var parts = new List<string>();
+        foreach (var t in new[] { GemType.White, GemType.Blue, GemType.Green, GemType.Red, GemType.Black, GemType.Gold })
+            if (gems[t] > 0) parts.Add($"{gems[t]}{GemLetter(t)}");
+        return parts.Count == 0 ? "nothing" : string.Join(",", parts);
+    }
+
+    private void AppendLog(string line)
+    {
+        // Newest entry goes to the top: add the new item, then move it to index 0
+        _actionLog.AddItem(line);
+        int newIdx = _actionLog.ItemCount - 1;
+        if (newIdx > 0)
+            _actionLog.MoveItem(newIdx, 0);
+        // Cap the log at 200 entries (remove oldest from the bottom)
+        while (_actionLog.ItemCount > 200)
+            _actionLog.RemoveItem(_actionLog.ItemCount - 1);
+    }
+
     private void HighlightMarketCard(int tier, int marketIndex, Color color)
     {
         if (tier >= 0 && tier < 3 && marketIndex >= 0 && marketIndex < 4)
@@ -145,7 +239,7 @@ public partial class GameBoard : Control
             {
                 var action = _pendingAiAction;
                 _pendingAiAction = null;
-                GameEngine.ApplyAction(_state, action);
+                ApplyActionWithLog(action);
                 RefreshDisplay();
             }
             return;
@@ -248,20 +342,20 @@ public partial class GameBoard : Control
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_right", 810);
+        margin.AddThemeConstantOverride("margin_right", 1190);
         margin.AddThemeConstantOverride("margin_top", 8);
         margin.AddThemeConstantOverride("margin_bottom", 8);
         margin.AddChild(root);
         AddChild(margin);
 
-        // Players panel — absolutely positioned, anchored top-right, full height
+        // Players panel — middle column, fixed left at x=620, 800 wide
         var playerPanel = new ScrollContainer();
-        playerPanel.AnchorLeft = 1.0f;
-        playerPanel.AnchorRight = 1.0f;
+        playerPanel.AnchorLeft = 0.0f;
+        playerPanel.AnchorRight = 0.0f;
         playerPanel.AnchorTop = 0.0f;
         playerPanel.AnchorBottom = 1.0f;
-        playerPanel.OffsetLeft = -800;
-        playerPanel.OffsetRight = -8;
+        playerPanel.OffsetLeft = 620;
+        playerPanel.OffsetRight = 620 + 800;
         playerPanel.OffsetTop = 8;
         playerPanel.OffsetBottom = -8;
         playerPanel.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
@@ -275,6 +369,38 @@ public partial class GameBoard : Control
         _playersArea.AddChild(playersLabel);
         playerPanel.AddChild(_playersArea);
         AddChild(playerPanel);
+
+        // Action log — right column, full height
+        var logContainer = new VBoxContainer();
+        logContainer.AnchorLeft = 1.0f;
+        logContainer.AnchorRight = 1.0f;
+        logContainer.AnchorTop = 0.0f;
+        logContainer.AnchorBottom = 1.0f;
+        logContainer.OffsetLeft = -370;
+        logContainer.OffsetRight = -10;
+        logContainer.OffsetTop = 8;
+        logContainer.OffsetBottom = -8;
+        logContainer.AddThemeConstantOverride("separation", 4);
+
+        var logLabel = new Label { Text = "ACTION LOG" };
+        logLabel.AddThemeColorOverride("font_color", Colors.Gray);
+        logLabel.AddThemeFontSizeOverride("font_size", 12);
+        logContainer.AddChild(logLabel);
+
+        _actionLog = new ItemList();
+        _actionLog.SizeFlagsVertical = SizeFlags.ExpandFill;
+        _actionLog.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _actionLog.AddThemeFontSizeOverride("font_size", 26);
+        _actionLog.AddThemeConstantOverride("v_separation", 12);
+        _actionLog.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(0.08f, 0.08f, 0.1f),
+            BorderWidthLeft = 1, BorderWidthRight = 1,
+            BorderWidthTop = 1, BorderWidthBottom = 1,
+            BorderColor = new Color(0.3f, 0.3f, 0.3f)
+        });
+        logContainer.AddChild(_actionLog);
+        AddChild(logContainer);
 
         // Discard panel — centered overlay, hidden by default
         _discardPanel = new DiscardPanel();
@@ -313,11 +439,36 @@ public partial class GameBoard : Control
         victoryMargin.AddThemeConstantOverride("margin_right", 20);
         victoryMargin.AddThemeConstantOverride("margin_top", 20);
         victoryMargin.AddThemeConstantOverride("margin_bottom", 20);
+
+        var victoryContent = new VBoxContainer();
+        victoryContent.AddThemeConstantOverride("separation", 16);
+
         _victoryLabel = new Label();
         _victoryLabel.AddThemeColorOverride("font_color", Colors.White);
         _victoryLabel.AddThemeFontSizeOverride("font_size", 20);
         _victoryLabel.AutowrapMode = TextServer.AutowrapMode.Word;
-        victoryMargin.AddChild(_victoryLabel);
+        _victoryLabel.SizeFlagsVertical = SizeFlags.ExpandFill;
+        victoryContent.AddChild(_victoryLabel);
+
+        var buttonRow = new HBoxContainer();
+        buttonRow.AddThemeConstantOverride("separation", 12);
+        buttonRow.Alignment = BoxContainer.AlignmentMode.Center;
+
+        var newGameBtn = new Button { Text = "New Game" };
+        newGameBtn.CustomMinimumSize = new Vector2(130, 44);
+        newGameBtn.AddThemeFontSizeOverride("font_size", 16);
+        newGameBtn.Pressed += () => EmitSignal(SignalName.NewGameRequested);
+        buttonRow.AddChild(newGameBtn);
+
+        var menuBtn = new Button { Text = "Main Menu" };
+        menuBtn.CustomMinimumSize = new Vector2(130, 44);
+        menuBtn.AddThemeFontSizeOverride("font_size", 16);
+        menuBtn.Pressed += () => EmitSignal(SignalName.MainMenuRequested);
+        buttonRow.AddChild(menuBtn);
+
+        victoryContent.AddChild(buttonRow);
+
+        victoryMargin.AddChild(victoryContent);
         _victoryPanel.AddChild(victoryMargin);
         AddChild(_victoryPanel);
     }
@@ -377,7 +528,7 @@ public partial class GameBoard : Control
         if (action == null) return;
         if (!ActionValidator.IsValid(_state, action)) return;
 
-        GameEngine.ApplyAction(_state, action);
+        ApplyActionWithLog(action);
         RefreshDisplay();
     }
 
@@ -386,7 +537,7 @@ public partial class GameBoard : Control
         var action = GameAction.PurchaseCard(tier, marketIndex);
         if (!ActionValidator.IsValid(_state, action)) return;
 
-        GameEngine.ApplyAction(_state, action);
+        ApplyActionWithLog(action);
         RefreshDisplay();
     }
 
@@ -395,7 +546,7 @@ public partial class GameBoard : Control
         var action = GameAction.ReserveCard(tier, marketIndex);
         if (!ActionValidator.IsValid(_state, action)) return;
 
-        GameEngine.ApplyAction(_state, action);
+        ApplyActionWithLog(action);
         RefreshDisplay();
     }
 
@@ -404,7 +555,7 @@ public partial class GameBoard : Control
         var action = GameAction.PurchaseReserved(reserveIndex);
         if (!ActionValidator.IsValid(_state, action)) return;
 
-        GameEngine.ApplyAction(_state, action);
+        ApplyActionWithLog(action);
         RefreshDisplay();
     }
 
@@ -414,7 +565,7 @@ public partial class GameBoard : Control
         var action = GameAction.DiscardGems(gems);
         if (!ActionValidator.IsValid(_state, action)) return;
 
-        GameEngine.ApplyAction(_state, action);
+        ApplyActionWithLog(action);
         RefreshDisplay();
     }
 
