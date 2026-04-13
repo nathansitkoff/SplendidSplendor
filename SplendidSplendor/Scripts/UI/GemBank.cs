@@ -32,6 +32,22 @@ public partial class GemBank : HBoxContainer
         UpdateDisplay();
     }
 
+    /// <summary>Programmatically select a gem (used by AI animation).</summary>
+    public void SelectGemExternal(GemType type)
+    {
+        _selected.Add(type);
+        _takeTwoColor = null;
+        UpdateDisplay();
+    }
+
+    /// <summary>Programmatically enter take-2 mode for a color.</summary>
+    public void SetTakeTwoExternal(GemType type)
+    {
+        _selected.Clear();
+        _takeTwoColor = type;
+        UpdateDisplay();
+    }
+
     public override void _Ready()
     {
         AddThemeConstantOverride("separation", 14);

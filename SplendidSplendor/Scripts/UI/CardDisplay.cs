@@ -8,6 +8,13 @@ public partial class CardDisplay : PanelContainer
     private Card? _card;
     private bool _affordable;
     private bool _interactive;
+    private Color? _highlightColor;
+
+    public void SetHighlight(Color? color)
+    {
+        _highlightColor = color;
+        QueueRedraw();
+    }
 
     [Signal]
     public delegate void CardClickedEventHandler(int tier, int marketIndex);
@@ -97,10 +104,15 @@ public partial class CardDisplay : PanelContainer
                 cost.ToString(), HorizontalAlignment.Left, -1, 16, textColor);
         }
 
-        // Border — green if affordable, dim if not
-        if (_interactive && _affordable)
+        // Border — highlight > affordable > default
+        if (_highlightColor.HasValue)
         {
-            DrawRect(rect, new Color(0.2f, 0.9f, 0.3f), false, 3);
+            DrawRect(rect, _highlightColor.Value, false, 5);
+        }
+        else if (_interactive && _affordable)
+        {
+            // Yellow border = affordable/purchasable
+            DrawRect(rect, new Color(0.95f, 0.85f, 0.15f), false, 3);
         }
         else
         {

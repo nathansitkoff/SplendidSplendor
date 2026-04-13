@@ -26,6 +26,11 @@ public partial class GameBoard : Control
     public bool[] IsAi { get; set; } = Array.Empty<bool>();
 
     private Godot.Timer _aiTimer = null!;
+    private readonly Queue<(Action step, double delay)> _aiSteps = new();
+    private GameAction? _pendingAiAction;
+    // References to market card displays for highlighting during AI turns
+    private readonly CardDisplay[,] _marketCardDisplays = new CardDisplay[3, 4];
+    private readonly List<CardDisplay> _reservedCardDisplays = new();
 
     public override void _Ready()
     {
@@ -60,21 +65,102 @@ public partial class GameBoard : Control
     private void MaybeStartAiTurn()
     {
         if (_state.GameOver) return;
-        if (IsCurrentPlayerAi() || _state.NeedsDiscard && IsCurrentPlayerAi())
+        if (_aiSteps.Count > 0) return; // already running
+        if (!IsCurrentPlayerAi()) return;
+
+        // Compute the action and enqueue animation steps
+        var action = AiPlayer.ChooseAction(_state);
+        _pendingAiAction = action;
+        BuildAnimationSteps(action);
+        RunNextStep();
+    }
+
+    private void BuildAnimationSteps(GameAction action)
+    {
+        switch (action)
         {
-            _aiTimer.Start();
+            case GameAction.TakeThreeGemsAction t3:
+                // Initial pause to read the board
+                _aiSteps.Enqueue((() => { _gemBank.ClearSelection(); }, 0.5));
+                // Select each gem one at a time
+                foreach (var color in t3.Colors)
+                {
+                    var captured = color;
+                    _aiSteps.Enqueue((() => _gemBank.SelectGemExternal(captured), 0.4));
+                }
+                // Show selection briefly before confirming
+                _aiSteps.Enqueue((() => { }, 0.5));
+                break;
+
+            case GameAction.TakeTwoGemsAction t2:
+                _aiSteps.Enqueue((() => { _gemBank.ClearSelection(); }, 0.5));
+                _aiSteps.Enqueue((() => _gemBank.SetTakeTwoExternal(t2.Color), 0.8));
+                break;
+
+            case GameAction.PurchaseCardAction p:
+                _aiSteps.Enqueue((() => HighlightMarketCard(p.Tier, p.MarketIndex, new Color(0.2f, 0.9f, 0.3f)), 0.8));
+                break;
+
+            case GameAction.ReserveCardAction r when r.MarketIndex != null:
+                _aiSteps.Enqueue((() => HighlightMarketCard(r.Tier, r.MarketIndex.Value, new Color(0.2f, 0.7f, 0.95f)), 0.8));
+                break;
+
+            case GameAction.PurchaseReservedAction pr:
+                _aiSteps.Enqueue((() => HighlightReservedCard(pr.ReserveIndex, new Color(0.2f, 0.9f, 0.3f)), 0.8));
+                break;
+
+            case GameAction.DiscardGemsAction:
+                // Discard panel is already showing; brief pause
+                _aiSteps.Enqueue((() => { }, 0.6));
+                break;
+
+            default:
+                _aiSteps.Enqueue((() => { }, 0.3));
+                break;
         }
+    }
+
+    private void HighlightMarketCard(int tier, int marketIndex, Color color)
+    {
+        if (tier >= 0 && tier < 3 && marketIndex >= 0 && marketIndex < 4)
+        {
+            _marketCardDisplays[tier, marketIndex]?.SetHighlight(color);
+        }
+    }
+
+    private void HighlightReservedCard(int index, Color color)
+    {
+        if (index >= 0 && index < _reservedCardDisplays.Count)
+        {
+            _reservedCardDisplays[index]?.SetHighlight(color);
+        }
+    }
+
+    private void RunNextStep()
+    {
+        if (_aiSteps.Count == 0)
+        {
+            // Apply the action and refresh
+            if (_pendingAiAction != null)
+            {
+                var action = _pendingAiAction;
+                _pendingAiAction = null;
+                GameEngine.ApplyAction(_state, action);
+                RefreshDisplay();
+            }
+            return;
+        }
+
+        var (step, delay) = _aiSteps.Dequeue();
+        step();
+        _aiTimer.WaitTime = delay;
+        _aiTimer.Start();
     }
 
     private void OnAiTimerTimeout()
     {
         if (_state.GameOver) return;
-        if (!IsCurrentPlayerAi() && !_state.NeedsDiscard) return;
-
-        var action = AiPlayer.ChooseAction(_state);
-        GameEngine.ApplyAction(_state, action);
-        RefreshDisplay();
-        MaybeStartAiTurn();
+        RunNextStep();
     }
 
     private void BuildLayout()
@@ -105,8 +191,35 @@ public partial class GameBoard : Control
         noblesSection.AddChild(_noblesRow);
         topRow.AddChild(noblesSection);
 
-        // Gem bank
+        root.AddChild(topRow);
+
+        // Card market
+        _marketArea = new VBoxContainer();
+        _marketArea.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _marketArea.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+        _marketArea.AddThemeConstantOverride("separation", 2);
+
+        var tierLabels = new[] { "TIER III", "TIER II", "TIER I" };
+        for (int i = 0; i < 3; i++)
+        {
+            var tierSection = new VBoxContainer();
+            tierSection.AddThemeConstantOverride("separation", 0);
+            var tierLabel = new Label { Text = tierLabels[i] };
+            tierLabel.AddThemeColorOverride("font_color", Colors.Gray);
+            tierLabel.AddThemeFontSizeOverride("font_size", 10);
+            tierSection.AddChild(tierLabel);
+
+            var cardRow = new HBoxContainer();
+            cardRow.AddThemeConstantOverride("separation", 4);
+            cardRow.Name = $"TierRow{2 - i}";
+            tierSection.AddChild(cardRow);
+            _marketArea.AddChild(tierSection);
+        }
+        root.AddChild(_marketArea);
+
+        // Gem bank directly below the card market (just under the tableau)
         var bankSection = new VBoxContainer();
+        bankSection.SizeFlagsVertical = SizeFlags.ShrinkBegin;
         var bankLabel = new Label { Text = "GEM BANK (click to select)" };
         bankLabel.AddThemeColorOverride("font_color", Colors.Gray);
         bankLabel.AddThemeFontSizeOverride("font_size", 11);
@@ -129,39 +242,13 @@ public partial class GameBoard : Control
         _cancelButton.Pressed += OnCancelPressed;
         _actionBar.AddChild(_cancelButton);
         bankSection.AddChild(_actionBar);
+        root.AddChild(bankSection);
 
-        topRow.AddChild(bankSection);
-        root.AddChild(topRow);
-
-        // Card market
-        _marketArea = new VBoxContainer();
-        _marketArea.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _marketArea.SizeFlagsVertical = SizeFlags.ExpandFill;
-        _marketArea.AddThemeConstantOverride("separation", 2);
-
-        var tierLabels = new[] { "TIER III", "TIER II", "TIER I" };
-        for (int i = 0; i < 3; i++)
-        {
-            var tierSection = new VBoxContainer();
-            tierSection.AddThemeConstantOverride("separation", 0);
-            var tierLabel = new Label { Text = tierLabels[i] };
-            tierLabel.AddThemeColorOverride("font_color", Colors.Gray);
-            tierLabel.AddThemeFontSizeOverride("font_size", 10);
-            tierSection.AddChild(tierLabel);
-
-            var cardRow = new HBoxContainer();
-            cardRow.AddThemeConstantOverride("separation", 4);
-            cardRow.Name = $"TierRow{2 - i}";
-            tierSection.AddChild(cardRow);
-            _marketArea.AddChild(tierSection);
-        }
-        root.AddChild(_marketArea);
-
-        // Margin wrapper for left side (title, nobles, bank, market)
+        // Margin wrapper for left side (title, nobles, market, bank)
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_right", 640);
+        margin.AddThemeConstantOverride("margin_right", 810);
         margin.AddThemeConstantOverride("margin_top", 8);
         margin.AddThemeConstantOverride("margin_bottom", 8);
         margin.AddChild(root);
@@ -173,7 +260,7 @@ public partial class GameBoard : Control
         playerPanel.AnchorRight = 1.0f;
         playerPanel.AnchorTop = 0.0f;
         playerPanel.AnchorBottom = 1.0f;
-        playerPanel.OffsetLeft = -630;
+        playerPanel.OffsetLeft = -800;
         playerPanel.OffsetRight = -8;
         playerPanel.OffsetTop = 8;
         playerPanel.OffsetBottom = -8;
@@ -341,6 +428,9 @@ public partial class GameBoard : Control
 
     private void RefreshDisplay()
     {
+        // Clear display references (rebuilt below)
+        _reservedCardDisplays.Clear();
+
         // Victory check
         if (_state.GameOver)
         {
@@ -417,6 +507,7 @@ public partial class GameBoard : Control
                 cardDisplay.SetCard(card, interactive: true, affordable: affordable, tier: tier, marketIndex: i);
                 cardDisplay.CardClicked += OnCardClicked;
                 cardDisplay.CardReserved += OnCardReserved;
+                _marketCardDisplays[tier, i] = cardDisplay;
             }
         }
 
@@ -435,12 +526,33 @@ public partial class GameBoard : Control
         {
             bool isCurrentPlayer = i == _state.CurrentPlayerIndex;
 
-            // Each player is a row: [reserved cards] [player info panel]
+            // Each player is a row: [player info panel] [collected nobles] [reserved cards]
+            // Player info is leftmost so it's always visible (anchored at window edge).
             var playerRow = new HBoxContainer();
             playerRow.AddThemeConstantOverride("separation", 6);
             playerRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 
-            // Reserved cards on the left (always reserve the space for 3 slots
+            // Player info panel on the far left (always visible)
+            var panel = new PlayerPanel();
+            panel.CustomMinimumSize = new Vector2(220, 180);
+            panel.SetPlayer(_state.Players[i], i, isCurrentPlayer);
+            playerRow.AddChild(panel);
+
+            // Collected nobles column (fixed width, grid wraps 2 per row)
+            var nobleCol = new GridContainer { Columns = 2 };
+            nobleCol.AddThemeConstantOverride("h_separation", 3);
+            nobleCol.AddThemeConstantOverride("v_separation", 3);
+            nobleCol.CustomMinimumSize = new Vector2(150, 180);
+            foreach (var noble in _state.Players[i].Nobles)
+            {
+                var nd = new NobleDisplay();
+                nd.CustomMinimumSize = new Vector2(72, 85);
+                nobleCol.AddChild(nd);
+                nd.SetNoble(noble, compact: true);
+            }
+            playerRow.AddChild(nobleCol);
+
+            // Reserved cards (always reserve the space for 3 slots
             // so player panels align vertically)
             var reserveRow = new HBoxContainer();
             reserveRow.AddThemeConstantOverride("separation", 4);
@@ -458,6 +570,7 @@ public partial class GameBoard : Control
                     {
                         int reserveIdx = j;
                         rDisplay.CardClicked += (_, _) => OnReservedCardClicked(reserveIdx);
+                        _reservedCardDisplays.Add(rDisplay);
                     }
                 }
                 else
@@ -467,13 +580,6 @@ public partial class GameBoard : Control
                 reserveRow.AddChild(rDisplay);
             }
             playerRow.AddChild(reserveRow);
-
-            // Player info panel on the right (narrower)
-            var panel = new PlayerPanel();
-            panel.CustomMinimumSize = new Vector2(220, 180);
-            panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            panel.SetPlayer(_state.Players[i], i, isCurrentPlayer);
-            playerRow.AddChild(panel);
 
             _playersArea.AddChild(playerRow);
         }
