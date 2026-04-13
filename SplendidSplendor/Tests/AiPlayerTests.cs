@@ -276,4 +276,98 @@ public class AiPlayerTests
         // Should not throw
         GameEngine.ApplyAction(state, action);
     }
+
+    // === Engine building ===
+
+    [Fact]
+    public void Early_game_buys_affordable_zero_point_card_for_bonus()
+    {
+        var state = GameEngine.SetupGame(2);
+        var player = state.CurrentPlayer;
+        state.Nobles.Clear();
+        // No affordable point cards
+        // Only a 0-point tier-I card is affordable
+        var bonusCard = MakeCard(GemType.Blue, 0, Cost(w: 1));
+        var expensiveCard = MakeCard(GemType.Red, 5, Cost(w: 7));
+        state.TierMarket[0] = new List<Card> { bonusCard };
+        state.TierMarket[2] = new List<Card> { expensiveCard };
+        player.Gems[GemType.White] = 1;
+
+        var action = AiPlayer.ChooseAction(state);
+
+        // Should buy the 0-point card (engine building) rather than hoard gems
+        Assert.IsType<GameAction.PurchaseCardAction>(action);
+    }
+
+    [Fact]
+    public void Does_not_take_gems_when_at_8_with_affordable_card()
+    {
+        var state = GameEngine.SetupGame(2);
+        var player = state.CurrentPlayer;
+        state.Nobles.Clear();
+        // Player has 8 gems already
+        player.Gems[GemType.White] = 8;
+        // There's a 0-point affordable card
+        var card = MakeCard(GemType.Blue, 0, Cost(w: 1));
+        state.TierMarket[0] = new List<Card> { card };
+
+        var action = AiPlayer.ChooseAction(state);
+
+        // Should buy the card rather than take more gems and overflow
+        Assert.IsType<GameAction.PurchaseCardAction>(action);
+    }
+
+    [Fact]
+    public void Two_ais_can_play_a_full_game_to_completion()
+    {
+        var state = GameEngine.SetupGame(2);
+
+        int maxTurns = 500; // generous bound
+        int turnCount = 0;
+        while (!state.GameOver && turnCount < maxTurns)
+        {
+            var action = AiPlayer.ChooseAction(state);
+            Assert.True(ActionValidator.IsValid(state, action),
+                $"AI chose invalid action on turn {turnCount}: {action.GetType().Name}");
+            GameEngine.ApplyAction(state, action);
+            turnCount++;
+        }
+
+        Assert.True(state.GameOver, $"Game did not complete in {maxTurns} turns");
+        // At least one player should have won with 15+
+        Assert.True(state.Players.Any(p => p.Score >= 15),
+            $"Game over but nobody reached 15. Scores: {string.Join(", ", state.Players.Select(p => p.Score))}");
+    }
+
+    [Fact]
+    public void AI_does_not_target_unreachable_tier_3_card()
+    {
+        var state = GameEngine.SetupGame(2);
+        var player = state.CurrentPlayer;
+        state.Nobles.Clear();
+
+        // A cheap tier-I card and a very expensive tier-III card in market
+        var cheap = MakeCard(GemType.Blue, 0, Cost(w: 1, g: 1, r: 1));
+        var expensive = MakeCard(GemType.Red, 5, Cost(w: 5, b: 5, g: 5, r: 3), tier: 3);
+        state.TierMarket[0] = new List<Card> { cheap };
+        state.TierMarket[2] = new List<Card> { expensive };
+
+        // Empty hand, pick target via rule 5
+        var action = AiPlayer.ChooseAction(state);
+
+        // AI takes 3 gems. It should prefer colors needed for the cheap card
+        // (white, green, red) rather than all-over-the-place for the tier-III
+        if (action is GameAction.TakeThreeGemsAction take)
+        {
+            // At least 2 of the 3 should match the cheap card's needs
+            int matches = 0;
+            foreach (var c in take.Colors)
+            {
+                if (c == GemType.White || c == GemType.Green || c == GemType.Red)
+                    matches++;
+            }
+            Assert.True(matches >= 2,
+                $"AI took {string.Join(",", take.Colors)}, expected at least 2 matching cheap card (W,G,R)");
+        }
+    }
 }

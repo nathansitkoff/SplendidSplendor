@@ -36,6 +36,18 @@ public partial class GameBoard : Control
         _aiTimer.Timeout += OnAiTimerTimeout;
         AddChild(_aiTimer);
 
+        // Wire up AI decision logging: print to Godot console and append to a file
+        string logPath = "/tmp/splendor_ai.log";
+        // Truncate log file at start of each game
+        try { System.IO.File.WriteAllText(logPath, $"=== New Game {System.DateTime.Now} ===\n"); }
+        catch { /* best effort */ }
+        AiPlayer.LogCallback = msg =>
+        {
+            GD.Print("[AI] " + msg);
+            try { System.IO.File.AppendAllText(logPath, msg + "\n"); }
+            catch { /* best effort */ }
+        };
+
         RefreshDisplay();
         MaybeStartAiTurn();
     }
